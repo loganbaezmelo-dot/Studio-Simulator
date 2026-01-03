@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>YouTube Studio Simulator</title>
+    <!-- Core Dependencies -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
+        :root { --sab: env(safe-area-inset-bottom); }
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: black;
+            overscroll-behavior-y: none;
+            height: 100%; width: 100%;
+            position: fixed; overflow: hidden;
+            color: #f5f5f5;
+        }
+        #root { height: 100dvh; display: flex; flex-direction: column; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
+        
+        .markdown-content h1, .markdown-content h2 { font-size: 1rem; font-weight: 700; margin-top: 0.5rem; color: white; border-bottom: 1px solid #333; }
+        .markdown-content p { margin-bottom: 0.4rem; font-size: 0.75rem; line-height: 1.4; }
+        .markdown-content ul { list-style-type: disc; padding-left: 1rem; margin-bottom: 0.4rem; font-size: 0.75rem; }
+        .markdown-content table { width: 100%; border-collapse: collapse; margin: 0.5rem 0; font-size: 0.7rem; }
+        .markdown-content th { background: #1a1a1a; padding: 4px; border: 1px solid #333; text-align: left; }
+        .markdown-content td { padding: 4px; border: 1px solid #333; }
+
+        nav { padding-bottom: var(--sab); }
+        .tab-active { color: white; border-top: 2px solid #ef4444; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useMemo } = React;
+
+        const App = () => {
+            const load = (k, d) => {
+                try {
+                    const s = localStorage.getItem(k);
+                    return s ? JSON.parse(s) : d;
+                } catch { return d; }
+            };
+
+            const [subscribers, setSubscribers] = useState(() => load('yt_v2_subs', 0));
+            const [totalViews, setTotalViews] = useState(() => load('yt_v2_views', 0));
+            const [channelPoints, setChannelPoints] = useState(() => load('yt_v2_cp', 0));
+            const [videosMade, setVideosMade] = useState(() => load('yt_v2_vids', 0));
+            const [upgrades, setUpgrades] = useState(() => load('yt_v2_upgrades', { camera: 0, editing: 0, marketing: 0 }));
+            const [claimedAwards, setClaimedAwards] = useState(() => load('yt_v2_awards', []));
+            const [apiKey, setApiKey] = useState(() => localStorage.getItem('yt_v2_api_key') || "");
+            const [chatHistory, setChatHistory] = useState(() => load('yt_v2_chat', []));
+
+            useEffect(() => {
+                localStorage.setItem('yt_v2_subs', JSON.stringify(subscribers));
+                localStorage.setItem('yt_v2_views', JSON.stringify(totalViews));
+                localStorage.setItem('yt_v2_cp', JSON.stringify(channelPoints));
+                localStorage.setItem('yt_v2_vids', JSON.stringify(videosMade));
+                localStorage.setItem('yt_v2_upgrades', JSON.stringify(upgrades));
+                localStorage.setItem('yt_v2_awards', JSON.stringify(claimedAwards));
+                localStorage.setItem('yt_v2_api_key', apiKey);
+                localStorage.setItem('yt_v2_chat', JSON.stringify(chatHistory.slice(-10)));
+            }, [subscribers, totalViews, channelPoints, videosMade, upgrades, claimedAwards, apiKey, chatHistory]);
+
+            const [activeTab, setActiveTab] = useState('work'); 
+            const [showSettings, setShowSettings] = useState(false);
+            const [chatInput, setChatInput] = useState("");
+            const [isAiLoading, setIsAiLoading] = useState(false);
+            const [selectedTopic, setSelectedTopic] = useState("Gaming");
+            const [selectedCTA, setSelectedCTA] = useState("None");
+            const [selectedMeme, setSelectedMeme] = useState("6-7");
+            const [lastAction, setLastAction] = useState({ text: "Studio live.", type: 'neutral' });
+            
+            const chatContainerRef = useRef(null);
+
+            const CONFIG = {
+                BASE_VIEWS: [40, 120],
+                BASE_SUBS: 12,
+                COSTS: { camera: 60, editing: 80, marketing: 110 },
+                SCALING: { camera: 1.6, editing: 1.7, marketing: 1.8 },
+                BONUSES: { views: 0.25, subs: 0.20, cp: 0.15 },
+                TOPICS: {
+                    "Gaming": { viewMult: 1.0, subMult: 1.0 },
+                    "Tech": { viewMult: 1.4, subMult: 0.9 },
+                    "Memes": { viewMult: 3.0, subMult: 0.4 },
+                    "Vlogs": { viewMult: 1.0, subMult: 1.7 },
+                    "Education": { viewMult: 0.8, subMult: 2.2 }
+                },
+                MEMES: {
+                    "6-7": { v: 5.5, s: 0.40, desc: "Surreal nonsense. Massive reach." },
+                    "Chill Guy": { v: 4.0, s: 0.30, desc: "Viral low-effort content." },
+                    "Moo Deng": { v: 3.2, s: 0.65, desc: "High engagement conversion." },
+                    "English or Spanish": { v: 2.5, s: 1.4, desc: "Trapped comments boost." },
+                    "Look at the Stars": { v: 2.2, s: 1.0, desc: "Aesthetic brainrot." },
+                    "Skibidi Toilet": { v: 5.0, s: 0.20, desc: "Max views, low retention." }
+                },
+                CTAS: {
+                    "None": { subMult: 1.0, cpMult: 1.0 },
+                    "Like & Sub": { subMult: 2.0, cpMult: 0.8 },
+                    "Comment": { subMult: 1.4, cpMult: 1.6 },
+                    "External Link": { subMult: 0.5, cpMult: 3.5 }
+                }
+            };
+
+            useEffect(() => {
+                if (window.lucide) window.lucide.createIcons();
+            }, [activeTab, showSettings, videosMade, chatHistory]);
+
+            const getCost = (type) => Math.floor(CONFIG.COSTS[type] * Math.pow(CONFIG.SCALING[type], upgrades[type]));
+
+            const authority = useMemo(() => {
+                return 1 + (Math.log10(totalViews + 10) * 0.3);
+            }, [totalViews]);
+
+            const recordVideo = () => {
+                const vNum = videosMade + 1;
+                let vM = CONFIG.TOPICS[selectedTopic].viewMult;
+                let sM = CONFIG.TOPICS[selectedTopic].subMult;
+
+                if (selectedTopic === "Memes") {
+                    vM *= CONFIG.MEMES[selectedMeme].v;
+                    sM *= CONFIG.MEMES[selectedMeme].s;
+                }
+
+                const baseReach = Math.floor(Math.random() * (CONFIG.BASE_VIEWS[1] - CONFIG.BASE_VIEWS[0] + 1)) + CONFIG.BASE_VIEWS[0];
+                const views = Math.floor(baseReach * (1 + (upgrades.camera * CONFIG.BONUSES.views)) * vM * authority);
+                
+                const baseSubs = Math.max(0, Math.floor(CONFIG.BASE_SUBS + (Math.random() * 10 - 5)));
+                const subs = Math.floor(baseSubs * (1 + (upgrades.editing * CONFIG.BONUSES.subs)) * sM * CONFIG.CTAS[selectedCTA].subMult * authority);
+                
+                const points = Math.floor(views * (1 + (upgrades.marketing * CONFIG.BONUSES.cp)) * CONFIG.CTAS[selectedCTA].cpMult);
+                
+                setVideosMade(vNum);
+                setTotalViews(prev => prev + views);
+                setSubscribers(prev => prev + subs);
+                setChannelPoints(prev => prev + points);
+                setLastAction({ text: `Published Video #${vNum}: +${views.toLocaleString()} views.`, type: 'success' });
+            };
+
+            const buyUpgrade = (type) => {
+                const cost = getCost(type);
+                if (channelPoints >= cost) {
+                    setChannelPoints(p => p - cost);
+                    setUpgrades(prev => ({ ...prev, [type]: prev[type] + 1 }));
+                    setLastAction({ text: `${type.toUpperCase()} optimization complete.`, type: 'upgrade' });
+                }
+            };
+
+            const claimAward = (a) => {
+                if (subscribers >= a.milestone && !claimedAwards.includes(a.id)) {
+                    setClaimedAwards(prev => [...prev, a.id]);
+                    setChannelPoints(p => p + award.bonus);
+                    setLastAction({ text: `${a.name} Plaque acquired.`, type: 'award' });
+                }
+            };
+
+            const sendMessage = async (e) => {
+                e.preventDefault();
+                if (!chatInput.trim() || isAiLoading) return;
+                const userText = chatInput.trim();
+                setChatHistory(prev => [...prev, { role: 'user', content: userText }]);
+                setChatInput("");
+                setIsAiLoading(true);
+
+                const costs = { cam: getCost('camera'), edit: getCost('editing'), mark: getCost('marketing') };
+
+                const sysPrompt = `You are a growth consultant inside a "YouTube Studio Simulator" game. 
+                
+                STRICT COMPLIANCE RULES:
+                - You can ONLY suggest CTAs from this list: None, Like & Sub, Comment, External Link.
+                - You can ONLY suggest Topics from this list: Gaming, Tech, Memes, Vlogs, Education.
+                - You can ONLY suggest Memes from this list: 6-7, Chill Guy, Moo Deng, English or Spanish, Look at the Stars, Skibidi Toilet.
+                - NEVER suggest buttons or features like "Hit the Bell", "Discord", "Patreon", or "Shorts" as they do not exist in this game.
+                
+                FINANCIAL AWARENESS:
+                - Current Wallet: ${channelPoints.toLocaleString()} CP.
+                - Prices: Optics L${upgrades.camera+1}: ${costs.cam.toLocaleString()} CP, Workflow L${upgrades.edit+1}: ${costs.edit.toLocaleString()} CP, Marketing L${upgrades.mark+1}: ${costs.mark.toLocaleString()} CP.
+                - NEVER tell the user to buy something they cannot afford unless you are telling them to save up.
+                
+                STATS:
+                - ${subscribers.toLocaleString()} subs, ${totalViews.toLocaleString()} views. 
+                - Current Authority Multiplier: x${authority.toFixed(2)}.`;
+
+                try {
+                    if (!apiKey) {
+                        setChatHistory(prev => [...prev, { role: 'ai', content: "Strategist requires an API Key. Open Settings and use the Google AI Studio link." }]);
+                        setIsAiLoading(false); return;
+                    }
+                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ contents: [{ parts: [{ text: userText }] }], systemInstruction: { parts: [{ text: sysPrompt }] } })
+                    });
+                    const data = await res.json();
+                    const aiRes = data.candidates?.[0]?.content?.parts?.[0]?.text || "Strategy failure.";
+                    setChatHistory(prev => [...prev, { role: 'ai', content: aiRes }]);
+                } catch { setChatHistory(prev => [...prev, { role: 'ai', content: "Connection timeout." }]); } finally { setIsAiLoading(false); }
+            };
+
+            useEffect(() => { if (chatContainerRef.current) chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight; }, [chatHistory, isAiLoading]);
+
+            const dispV = CONFIG.TOPICS[selectedTopic].viewMult * (selectedTopic === 'Memes' ? CONFIG.MEMES[selectedMeme].v : 1);
+            const dispS = CONFIG.BASE_SUBS * (1 + (upgrades.editing * CONFIG.BONUSES.subs)) * CONFIG.TOPICS[selectedTopic].subMult * (selectedTopic === 'Memes' ? CONFIG.MEMES[selectedMeme].s : 1) * CONFIG.CTAS[selectedCTA].subMult * authority;
+
+            const awardsList = [
+                { id: 's', name: "Silver", milestone: 100000, bonus: 5000, emoji: "🥈" },
+                { id: 'g', name: "Gold", milestone: 1000000, bonus: 25000, emoji: "🥇" },
+                { id: 'd', name: "Diamond", milestone: 10000000, bonus: 100000, emoji: "💎" },
+                { id: 'rd', name: "Red Diamond", milestone: 100000000, bonus: 500000, emoji: "🔴" }
+            ];
+
+            return (
+                <div className="flex flex-col md:flex-row h-full w-full bg-black text-neutral-100 overflow-hidden">
+                    {/* Header */}
+                    <div className="md:hidden flex items-center justify-between p-4 bg-neutral-900 border-b border-neutral-800 shrink-0">
+                        <div className="flex items-center gap-2">
+                            <div className="bg-red-600 p-1 rounded-sm shadow-lg shadow-red-900/20"><i data-lucide="video" className="text-white w-4 h-4"></i></div>
+                            <span className="font-black text-sm uppercase italic tracking-tighter">Studio Pro</span>
+                        </div>
+                        <button onClick={() => setShowSettings(true)} className="p-1"><i data-lucide="settings" className="w-5 h-5 text-neutral-500"></i></button>
+                    </div>
+
+                    <div className="flex flex-col md:flex-row flex-1 min-h-0 w-full overflow-hidden">
+                        {/* Sidebar */}
+                        <aside className={`${activeTab === 'stats' ? 'flex' : 'hidden md:flex'} w-full md:w-80 flex-col shrink-0 bg-neutral-900 border-r border-neutral-800 overflow-hidden`}>
+                            <div className="hidden md:flex p-6 border-b border-neutral-800 justify-between items-center bg-black/20">
+                                <h1 className="font-black text-lg uppercase italic tracking-tighter text-red-600">Analytics</h1>
+                                <button onClick={() => setShowSettings(true)}><i data-lucide="settings" className="w-5 h-5 text-neutral-500 hover:text-white"></i></button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-5 space-y-8 custom-scrollbar">
+                                <section>
+                                    <h3 className="text-[9px] font-black uppercase text-neutral-500 mb-4 tracking-[0.2em] border-l-2 border-red-600 pl-2">Channel Growth</h3>
+                                    <div className="space-y-1">
+                                        <StatRow label="Subs" value={subscribers.toLocaleString()} icon="users" />
+                                        <StatRow label="Views" value={totalViews.toLocaleString()} icon="eye" />
+                                        <StatRow label="Authority" value={`x${authority.toFixed(2)}`} icon="trending-up" color="text-red-500" />
+                                        <StatRow label="Points" value={channelPoints.toLocaleString()} icon="zap" color="text-amber-400" />
+                                        <StatRow label="Videos" value={videosMade.toLocaleString()} icon="video" />
+                                    </div>
+                                </section>
+                                <section>
+                                    <h3 className="text-[9px] font-black uppercase text-neutral-500 mb-4 tracking-[0.2em] border-l-2 border-neutral-700 pl-2">Creator Awards</h3>
+                                    <div className="space-y-2">
+                                        {awardsList.map(a => (
+                                            <button key={a.id} onClick={() => claimAward(a)} disabled={subscribers < a.milestone || claimedAwards.includes(a.id)} className={`w-full text-left p-3 rounded border transition-all flex items-center justify-between ${claimedAwards.includes(a.id) ? 'bg-emerald-950/20 border-emerald-500/30' : subscribers >= a.milestone ? 'bg-amber-900/30 border-amber-500/50 animate-pulse' : 'bg-neutral-800/20 border-neutral-800 opacity-40'}`}>
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-xl">{a.emoji}</span>
+                                                    <div><p className="text-[10px] font-bold uppercase">{a.name}</p><p className="text-[8px] text-neutral-500 italic uppercase">{a.milestone.toLocaleString()} subs</p></div>
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </section>
+                            </div>
+                        </aside>
+
+                        {/* Workstation */}
+                        <main className={`${activeTab === 'stats' ? 'hidden md:flex' : 'flex'} flex-1 flex-col min-w-0 bg-neutral-950 overflow-hidden`}>
+                            <div className={`${activeTab === 'work' ? 'flex' : 'hidden md:flex'} flex-col flex-1 min-h-0 overflow-hidden`}>
+                                <div className="flex-1 overflow-y-auto p-6 md:p-12 custom-scrollbar">
+                                    <div className="max-w-xl mx-auto space-y-8">
+                                        <header className="text-center space-y-2 pt-2">
+                                            <h2 className="text-4xl font-black italic uppercase tracking-tighter">Workstation</h2>
+                                            <div className="h-1 w-12 bg-red-600 mx-auto" />
+                                        </header>
+
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <div className="space-y-1.5">
+                                                <label className="text-[9px] font-black uppercase text-neutral-500 tracking-widest">Niche</label>
+                                                <select value={selectedTopic} onChange={(e) => setSelectedTopic(e.target.value)} className="w-full bg-neutral-900 border border-neutral-800 text-xs p-3 rounded outline-none focus:border-red-600 transition-all appearance-none">
+                                                    {Object.keys(CONFIG.TOPICS).map(t => <option key={t} value={t}>{t}</option>)}
+                                                </select>
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <label className="text-[9px] font-black uppercase text-neutral-500 tracking-widest">CTA Strategy</label>
+                                                <select value={selectedCTA} onChange={(e) => setSelectedCTA(e.target.value)} className="w-full bg-neutral-900 border border-neutral-800 text-xs p-3 rounded outline-none focus:border-red-600 transition-all appearance-none">
+                                                    {Object.keys(CONFIG.CTAS).map(c => <option key={c} value={c}>{c}</option>)}
+                                                </select>
+                                            </div>
+                                            {selectedTopic === "Memes" && (
+                                                <div className="space-y-1.5 col-span-1 sm:col-span-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                                                    <label className="text-[9px] font-black uppercase text-red-500 tracking-widest">Trending Meme</label>
+                                                    <select value={selectedMeme} onChange={(e) => setSelectedMeme(e.target.value)} className="w-full bg-neutral-900 border border-red-900 text-xs p-3 rounded outline-none shadow-[0_0_15px_rgba(239,68,68,0.1)] appearance-none">
+                                                        {Object.keys(CONFIG.MEMES).map(m => <option key={m} value={m}>{m}</option>)}
+                                                    </select>
+                                                    <p className="text-[9px] text-neutral-500 italic mt-1 font-medium">{CONFIG.MEMES[selectedMeme].desc}</p>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                            <div className="bg-neutral-900 p-5 rounded border border-neutral-800 shadow-xl shadow-black/20">
+                                                <p className="text-[9px] font-black text-neutral-500 uppercase mb-4 text-center border-b border-neutral-800 pb-2 tracking-[0.2em]">Estimated Velocity</p>
+                                                <div className="flex justify-between items-center px-2">
+                                                    <div><p className="text-[9px] text-neutral-400 uppercase font-bold">Reach</p><p className="text-xl font-black tracking-tighter text-white">~{(CONFIG.BASE_VIEWS[0] * dispV * authority).toLocaleString(undefined, {maximumFractionDigits:0})}</p></div>
+                                                    <div className="text-right"><p className="text-[9px] text-neutral-400 uppercase font-bold">Subs</p><p className="text-xl font-black text-emerald-500 tracking-tighter">~{Math.floor(dispS).toLocaleString()}</p></div>
+                                                </div>
+                                            </div>
+                                            <button onClick={recordVideo} className="bg-red-600 hover:bg-red-500 active:scale-95 transition-all rounded py-6 flex flex-col items-center justify-center font-black tracking-tighter border-b-4 border-red-800 shadow-2xl shadow-red-900/20">
+                                                <i data-lucide="play" className="w-8 h-8 mb-1"></i>
+                                                UPLOAD CONTENT
+                                            </button>
+                                        </div>
+
+                                        <div className="p-3 bg-neutral-900/50 border border-neutral-800 rounded flex items-center gap-3 text-[10px] font-bold uppercase tracking-wider text-neutral-400 animate-pulse">
+                                            <i data-lucide="chevron-right" className="text-red-500 w-4 h-4"></i>
+                                            {lastAction.text}
+                                        </div>
+
+                                        <div className="space-y-3 pb-24">
+                                            <UpgradeRow title="Visual Optics" level={upgrades.camera} desc="Reach / View boost" cost={getCost('camera')} icon="camera" canAfford={channelPoints >= getCost('camera')} onBuy={() => buyUpgrade('camera')} />
+                                            <UpgradeRow title="Workflow Pro" level={upgrades.editing} desc="Sub conversion boost" cost={getCost('editing')} icon="edit-3" canAfford={channelPoints >= getCost('editing')} onBuy={() => buyUpgrade('editing')} />
+                                            <UpgradeRow title="Marketing Hub" level={upgrades.marketing} desc="CP yield boost" cost={getCost('marketing')} icon="trending-up" canAfford={channelPoints >= getCost('marketing')} onBuy={() => buyUpgrade('marketing')} />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Consultant Chat */}
+                            <section className={`${activeTab === 'ai' ? 'flex flex-1' : 'hidden'} md:flex md:h-80 lg:h-[350px] bg-neutral-900 border-t border-neutral-800 flex-col shrink-0 overflow-hidden shadow-[0_-10px_30px_rgba(0,0,0,0.5)]`}>
+                                <div className="px-6 py-2 bg-black/40 border-b border-neutral-800 flex items-center justify-between shrink-0">
+                                    <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" /><h3 className="text-[9px] font-black uppercase tracking-[0.2em] text-neutral-400">Strategist Consultation</h3></div>
+                                </div>
+                                <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-neutral-950/20">
+                                    {chatHistory.length === 0 && <p className="text-center text-neutral-700 text-[10px] font-black py-10 tracking-[0.3em] uppercase italic">System Ready for Analysis</p>}
+                                    {chatHistory.map((msg, i) => (
+                                        <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                            <div className={`max-w-[90%] p-3 text-[11px] border leading-relaxed rounded-sm ${msg.role === 'user' ? 'bg-blue-600 border-blue-500 text-white font-bold' : 'bg-neutral-800 border-neutral-700 text-neutral-300'}`}>
+                                                <div className="markdown-content overflow-x-auto" dangerouslySetInnerHTML={{ __html: marked.parse(msg.content) }} />
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {isAiLoading && <div className="flex justify-start"><div className="bg-neutral-800 p-3 rounded-sm flex gap-1"><span className="w-1 h-1 bg-neutral-500 animate-pulse" /><span className="w-1 h-1 bg-neutral-500 animate-pulse [animation-delay:0.2s]" /><span className="w-1 h-1 bg-neutral-500 animate-pulse [animation-delay:0.4s]" /></div></div>}
+                                </div>
+                                <form onSubmit={sendMessage} className="p-3 bg-black border-t border-neutral-800 flex gap-2 shrink-0">
+                                    <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} placeholder="Consult growth analyst..." className="flex-1 bg-neutral-900 border border-neutral-800 rounded-sm px-4 py-3 text-[11px] outline-none focus:border-blue-500 text-white placeholder:text-neutral-700" />
+                                    <button type="submit" disabled={isAiLoading || !chatInput.trim()} className="px-6 bg-blue-600 font-black text-[10px] uppercase tracking-widest disabled:opacity-30 transition-all hover:bg-blue-500 active:scale-95">Send</button>
+                                </form>
+                            </section>
+                        </main>
+                    </div>
+
+                    {/* Navigation */}
+                    <nav className="md:hidden flex bg-neutral-900 border-t border-neutral-800 shrink-0 h-[64px] z-50">
+                        <TabButton active={activeTab === 'stats'} onClick={() => setActiveTab('stats')} icon="bar-chart-3" label="Stats" />
+                        <TabButton active={activeTab === 'work'} onClick={() => setActiveTab('work')} icon="play" label="Work" />
+                        <TabButton active={activeTab === 'ai'} onClick={() => setActiveTab('ai')} icon="message-square" label="AI" />
+                    </nav>
+
+                    {/* Settings Modal */}
+                    {showSettings && (
+                        <div className="fixed inset-0 bg-black/95 flex items-center justify-center p-6 z-[300] backdrop-blur-sm">
+                            <div className="bg-neutral-900 border border-neutral-800 w-full max-w-sm p-8 space-y-6 shadow-2xl">
+                                <div className="flex justify-between items-center border-b border-neutral-800 pb-4">
+                                    <h3 className="font-black text-xs uppercase tracking-[0.3em]">Config</h3>
+                                    <button onClick={() => setShowSettings(false)} className="hover:rotate-90 transition-transform"><i data-lucide="x" className="w-5 h-5"></i></button>
+                                </div>
+                                <div className="space-y-4">
+                                    <div className="p-4 bg-neutral-950 border border-neutral-800 rounded">
+                                        <p className="text-[10px] text-neutral-400 uppercase font-black mb-2 tracking-widest text-red-500">API Key Integration</p>
+                                        <p className="text-[9px] text-neutral-500 leading-relaxed italic">
+                                            To enable the AI consultant, get a free key from: 
+                                            <a href="https://aistudio.google.com/app/apikey" target="_blank" className="block text-blue-500 mt-1 hover:underline">aistudio.google.com</a>
+                                        </p>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="block text-[9px] font-black text-neutral-500 uppercase tracking-widest">Gemini API Key</label>
+                                        <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="INPUT KEY" className="w-full bg-black border border-neutral-800 px-4 py-3 text-[11px] outline-none focus:border-blue-500 tracking-widest text-white placeholder:text-neutral-900" />
+                                    </div>
+                                    <button onClick={() => setShowSettings(false)} className="w-full py-4 bg-blue-600 font-black text-[10px] uppercase tracking-widest transition-transform active:scale-95 shadow-lg shadow-blue-900/20">Apply & Sync</button>
+                                    <button onClick={() => { if(confirm('Delete all progress?')) { localStorage.clear(); window.location.reload(); } }} className="w-full text-[9px] text-neutral-700 uppercase font-black mt-2 hover:text-red-500 transition-colors">Wipe Data</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const TabButton = ({ active, onClick, icon, label }) => (
+            <button onClick={onClick} className={`flex-1 flex flex-col items-center justify-center gap-1 transition-all ${active ? 'tab-active' : 'text-neutral-500 opacity-60'}`}>
+                <i data-lucide={icon} className="w-5 h-5"></i>
+                <span className="text-[8px] font-black uppercase tracking-[0.2em]">{label}</span>
+            </button>
+        );
+
+        const StatRow = ({ label, value, icon, color = "text-neutral-200" }) => (
+            <div className="flex items-center justify-between p-2.5 rounded hover:bg-white/5 transition-colors group">
+                <div className="flex items-center gap-2 text-neutral-500 uppercase font-black text-[9px] tracking-tight group-hover:text-neutral-300">
+                    <i data-lucide={icon} className="w-3.5 h-3.5"></i> <span>{label}</span>
+                </div>
+                <span className={`text-[11px] font-black tracking-tight ${color}`}>{value}</span>
+            </div>
+        );
+
+        const UpgradeRow = ({ title, level, desc, cost, icon, canAfford, onBuy }) => (
+            <div className="bg-neutral-900 border border-neutral-800 p-4 rounded flex items-center justify-between group hover:border-neutral-700 transition-all shadow-lg shadow-black/20">
+                <div className="flex items-center gap-4 text-left">
+                    <div className="p-2.5 bg-black/40 border border-neutral-800 text-neutral-500 group-hover:text-red-500 transition-colors rounded-sm"><i data-lucide={icon} className="w-4 h-4"></i></div>
+                    <div>
+                        <p className="text-[10px] font-black uppercase tracking-tight">{title} <span className="text-red-600 text-[8px] ml-1 tracking-widest font-bold">L{level}</span></p>
+                        <p className="text-[8px] font-bold text-neutral-600 uppercase tracking-tighter group-hover:text-neutral-400">{desc}</p>
+                    </div>
+                </div>
+                <button onClick={onBuy} disabled={!canAfford} className={`px-4 py-2 font-black text-[9px] uppercase tracking-widest transition-all rounded-sm ${canAfford ? 'bg-white text-black hover:bg-neutral-200 shadow-md active:scale-95' : 'bg-neutral-800 text-neutral-600 opacity-50 cursor-not-allowed'}`}>{cost.toLocaleString()} CP</button>
+            </div>
+        );
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
+
