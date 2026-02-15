@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>YouTube Studio Simulator</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=JetBrains+Mono:wght@700&display=swap');
+        
+        :root { --sab: env(safe-area-inset-bottom); }
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: #0a0a0a;
+            overscroll-behavior-y: none;
+            height: 100%; width: 100%;
+            position: fixed; overflow: hidden;
+            color: #ffffff;
+        }
+        #root { height: 100dvh; display: flex; flex-direction: column; }
+        .custom-scrollbar::-webkit-scrollbar { width: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
+        
+        /* Studio Odometer Styling */
+        .odometer-container {
+            display: inline-flex;
+            overflow: hidden;
+            height: 1.2em;
+            line-height: 1.2em;
+            font-family: 'JetBrains+Mono', monospace;
+        }
+        .digit-column {
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .studio-card {
+            background: rgba(23, 23, 23, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: all 0.3s ease;
+        }
+        .studio-card:hover {
+            border-color: rgba(239, 68, 68, 0.2);
+        }
+
+        nav { padding-bottom: var(--sab); }
+        .tab-active { color: #ef4444; position: relative; }
+        .tab-active::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 12px;
+            height: 3px;
+            background: #ef4444;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useMemo } = React;
+
+        const RollingDigit = ({ digit }) => (
+            <div className="odometer-container">
+                <div className="digit-column" style={{ transform: `translateY(-${digit * 10}%)` }}>
+                    {[0,1,2,3,4,5,6,7,8,9].map(n => <span key={n}>{n}</span>)}
+                </div>
+            </div>
+        );
+
+        const StudioCounter = ({ value, className }) => {
+            const digits = Math.floor(value).toString().split('');
+            return (
+                <div className={`flex ${className}`}>
+                    {digits.map((d, i) => <RollingDigit key={digits.length - i} digit={parseInt(d)} />)}
+                </div>
+            );
+        };
+
+        const App = () => {
+            const load = (k, d) => {
+                try {
+                    const s = localStorage.getItem(k);
+                    return s ? JSON.parse(s) : d;
+                } catch { return d; }
+            };
+
+            const [subscribers, setSubscribers] = useState(() => load('yt_v3_subs', 0));
+            const [totalViews, setTotalViews] = useState(() => load('yt_v3_views', 0));
+            const [channelPoints, setChannelPoints] = useState(() => load('yt_v3_cp', 0));
+            const [videosMade, setVideosMade] = useState(() => load('yt_v3_vids', 0));
+            const [upgrades, setUpgrades] = useState(() => load('yt_v3_upgrades', { camera: 0, editing: 0, marketing: 0 }));
+            const [apiKey, setApiKey] = useState(() => localStorage.getItem('yt_v3_api_key') || "");
+            const [channelName, setChannelName] = useState(() => localStorage.getItem('yt_v3_channel_name') || "Creator");
+            const [chatHistory, setChatHistory] = useState(() => load('yt_v3_chat', []));
+            const [rivals, setRivals] = useState(() => load('yt_v3_rivals', [
+                { id: 'r1', name: "Vortex Gaming", subs: 250000000, daily: 750 },
+                { id: 'r2', name: "T-Series", subs: 236000000, daily: 122500 },
+                { id: 'r3', name: "Cocomelon", subs: 214000000, daily: 75000 },
+                { id: 'r4', name: "Sony Entertainment", subs: 207000000, daily: 50000 },
+                { id: 'r5', name: "MrBeast", subs: 200000000, daily: 249850 },
+                { id: 'r6', name: "PewDiePie", subs: 193000000, daily: -725 },
+                { id: 'r7', name: "Vortex", subs: 178000000, daily: 450 },
+                { id: 'r8', name: "Stokes Twins", subs: 172000000, daily: 248152 },
+                { id: 'r9', name: "HolaSoyGerman", subs: 165000000, daily: -2 },
+                { id: 'r10', name: "Moonbug Limited", subs: 154000000, daily: 92 }
+            ]));
+
+            useEffect(() => {
+                localStorage.setItem('yt_v3_subs', JSON.stringify(subscribers));
+                localStorage.setItem('yt_v3_views', JSON.stringify(totalViews));
+                localStorage.setItem('yt_v3_cp', JSON.stringify(channelPoints));
+                localStorage.setItem('yt_v3_vids', JSON.stringify(videosMade));
+                localStorage.setItem('yt_v3_upgrades', JSON.stringify(upgrades));
+                localStorage.setItem('yt_v3_api_key', apiKey);
+                localStorage.setItem('yt_v3_channel_name', channelName);
+                localStorage.setItem('yt_v3_chat', JSON.stringify(chatHistory.slice(-10)));
+                localStorage.setItem('yt_v3_rivals', JSON.stringify(rivals));
+            }, [subscribers, totalViews, channelPoints, videosMade, upgrades, apiKey, channelName, chatHistory, rivals]);
+
+            const [activeTab, setActiveTab] = useState('work'); 
+            const [showSettings, setShowSettings] = useState(false);
+            const [chatInput, setChatInput] = useState("");
+            const [isAiLoading, setIsAiLoading] = useState(false);
+            const [selectedTopic, setSelectedTopic] = useState("Gaming");
+            const [selectedCTA, setSelectedCTA] = useState("None");
+            const [selectedMeme, setSelectedMeme] = useState("6-7");
+            const chatContainerRef = useRef(null);
+
+            const CONFIG = {
+                COSTS: { camera: 100, editing: 150, marketing: 200 },
+                SCALING: { camera: 1.75, editing: 1.85, marketing: 1.95 },
+                TOPICS: { Gaming: 1, Tech: 1.4, Memes: 3.2, Vlogs: 1.2, Education: 0.9 },
+                MEMES: {
+                    "6-7": { v: 5.8, s: 0.45 },
+                    "Chill Guy": { v: 4.2, s: 0.35 },
+                    "Moo Deng": { v: 3.5, s: 0.7 },
+                    "English or Spanish": { v: 2.8, s: 1.5 },
+                    "Skibidi Toilet": { v: 5.2, s: 0.2 }
+                },
+                CTAS: { None: 1, "Like & Sub": 2.2, Comment: 1.5, "External Link": 0.6 }
+            };
+
+            const authority = useMemo(() => 1 + (Math.log10(totalViews + 10) * 0.38), [totalViews]);
+
+            useEffect(() => {
+                const interval = setInterval(() => {
+                    const tMult = CONFIG.TOPICS[selectedTopic] * (selectedTopic === 'Memes' ? CONFIG.MEMES[selectedMeme].v : 1);
+                    const sMult = (selectedTopic === 'Memes' ? CONFIG.MEMES[selectedMeme].s : 1) * CONFIG.CTAS[selectedCTA];
+                    
+                    const vGain = Math.floor((15 + (upgrades.camera * 40)) * tMult * authority);
+                    const sGain = Math.floor((2 + (upgrades.editing * 5)) * sMult * (vGain / 100) * authority);
+                    const pGain = Math.floor((vGain / 15) * (1 + (upgrades.marketing * 0.6)));
+
+                    setTotalViews(v => v + vGain);
+                    setSubscribers(s => s + sGain);
+                    setChannelPoints(p => p + pGain);
+
+                    setRivals(prev => prev.map(r => ({ ...r, subs: r.subs + (r.daily / 86400) })));
+                }, 1000);
+                return () => clearInterval(interval);
+            }, [upgrades, selectedTopic, selectedMeme, selectedCTA, authority]);
+
+            const currentRankings = useMemo(() => {
+                const combined = [...rivals, { id: 'user', name: channelName, subs: subscribers, isUser: true }];
+                return combined.sort((a, b) => b.subs - a.subs).slice(0, 10);
+            }, [rivals, subscribers, channelName]);
+
+            const getCost = (t) => Math.floor(CONFIG.COSTS[t] * Math.pow(CONFIG.SCALING[t], upgrades[t]));
+
+            const buy = (t) => {
+                const c = getCost(t);
+                if (channelPoints >= c) {
+                    setChannelPoints(p => p - c);
+                    setUpgrades(u => ({ ...u, [t]: u[t] + 1 }));
+                }
+            };
+
+            const sendMessage = async (e) => {
+                e.preventDefault();
+                if (!chatInput.trim() || isAiLoading) return;
+                const txt = chatInput.trim();
+                setChatHistory(p => [...p, { role: 'user', content: txt }]);
+                setChatInput("");
+                setIsAiLoading(true);
+
+                const sys = `Growth strategist game mode. User: ${subscribers} subs. Rank: #${currentRankings.findIndex(r => r.isUser) + 1}. Wallet: ${channelPoints} CP. Topics: Gaming, Tech, Memes, Vlogs, Education. CTAs: None, Like & Sub, Comment, External Link. Direct analysis only. No emojis. 6-7 is a high-reach meme.`;
+
+                try {
+                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ contents: [{ parts: [{ text: txt }] }], systemInstruction: { parts: [{ text: sys }] } })
+                    });
+                    const d = await res.json();
+                    setChatHistory(p => [...p, { role: 'ai', content: d.candidates?.[0]?.content?.parts?.[0]?.text || "Consultant error." }]);
+                } catch { setChatHistory(p => [...p, { role: 'ai', content: "Connect error. API Key needed." }]); } finally { setIsAiLoading(false); }
+            };
+
+            useEffect(() => { if (chatContainerRef.current) chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight; }, [chatHistory, isAiLoading]);
+
+            return (
+                <div className="flex flex-col md:flex-row h-full w-full bg-[#050505]">
+                    {/* Header: Mobile */}
+                    <div className="md:hidden flex items-center justify-between p-5 bg-[#0a0a0a] border-b border-white/5 shrink-0">
+                        <div className="flex items-center gap-3">
+                            <div className="bg-red-600 p-1.5 rounded-lg shadow-lg shadow-red-900/40"><i data-lucide="layout-dashboard" className="text-white w-4 h-4"></i></div>
+                            <h1 className="font-extrabold text-sm tracking-tighter uppercase italic">Studio Pro</h1>
+                        </div>
+                        <button onClick={() => setShowSettings(true)} className="p-2 bg-white/5 rounded-full"><i data-lucide="settings" className="w-5 h-5 text-neutral-400"></i></button>
+                    </div>
+
+                    <div className="flex flex-col md:flex-row flex-1 min-h-0 w-full overflow-hidden">
+                        {/* Sidebar: Global Ranking */}
+                        <aside className={`${activeTab === 'stats' ? 'flex' : 'hidden md:flex'} w-full md:w-[400px] flex-col shrink-0 bg-[#0a0a0a] border-r border-white/5 overflow-hidden`}>
+                            <div className="p-6 border-b border-white/5 hidden md:flex justify-between items-center">
+                                <h2 className="font-black text-xl tracking-tight text-white italic">GLOBAL TOP 10</h2>
+                                <button onClick={() => setShowSettings(true)}><i data-lucide="sliders" className="w-5 h-5 text-neutral-500 hover:text-white transition-colors cursor-pointer"></i></button>
+                            </div>
+                            
+                            <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
+                                {currentRankings.map((c, i) => (
+                                    <div key={c.id} className={`flex items-center gap-4 p-4 rounded-xl border transition-all duration-500 ${c.isUser ? 'bg-red-600/10 border-red-500/40 shadow-lg shadow-red-900/10' : 'bg-white/[0.02] border-white/5 opacity-70 hover:opacity-100'}`}>
+                                        <div className="w-8 font-black text-xs text-neutral-600 font-mono">#{i + 1}</div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className={`text-[10px] font-bold uppercase tracking-widest ${c.isUser ? 'text-red-500' : 'text-neutral-400'}`}>{c.name}</div>
+                                            <StudioCounter value={c.subs} className={`text-lg font-bold tracking-tighter ${c.isUser ? 'text-white' : 'text-neutral-200'}`} />
+                                        </div>
+                                        {c.isUser && <div className="w-2 h-2 bg-red-600 rounded-full animate-ping" />}
+                                    </div>
+                                ))}
+                            </div>
+                            
+                            <div className="p-6 border-t border-white/5 bg-black/40 space-y-4">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Available Capital</span>
+                                    <span className="text-sm font-black text-amber-400 font-mono">{channelPoints.toLocaleString()} CP</span>
+                                </div>
+                                <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                                    <div className="h-full bg-red-600" style={{ width: `${(subscribers / currentRankings[0].subs) * 100}%` }}></div>
+                                </div>
+                            </div>
+                        </aside>
+
+                        {/* Main Workstation */}
+                        <main className={`${activeTab === 'stats' ? 'hidden md:flex' : 'flex'} flex-1 flex-col min-w-0 bg-[#070707] overflow-hidden`}>
+                            <div className={`${activeTab === 'work' ? 'flex' : 'hidden md:flex'} flex-col flex-1 min-h-0 overflow-hidden`}>
+                                <div className="flex-1 overflow-y-auto p-6 md:p-16 custom-scrollbar">
+                                    <div className="max-w-2xl mx-auto space-y-12">
+                                        <div className="text-center space-y-4">
+                                            <h2 className="text-5xl font-black tracking-tighter uppercase italic leading-none">Workstation</h2>
+                                            <p className="text-xs font-semibold text-neutral-500 uppercase tracking-[0.4em]">Algorithm Engine v3.0</p>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black uppercase text-neutral-500 tracking-widest pl-1">Target Niche</label>
+                                                <select value={selectedTopic} onChange={(e) => setSelectedTopic(e.target.value)} className="w-full bg-[#111] border border-white/10 text-sm p-4 rounded-xl outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 transition-all appearance-none cursor-pointer">
+                                                    {Object.keys(CONFIG.TOPICS).map(t => <option key={t} value={t}>{t}</option>)}
+                                                </select>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black uppercase text-neutral-500 tracking-widest pl-1">Retention Strategy</label>
+                                                <select value={selectedCTA} onChange={(e) => setSelectedCTA(e.target.value)} className="w-full bg-[#111] border border-white/10 text-sm p-4 rounded-xl outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 transition-all appearance-none cursor-pointer">
+                                                    {Object.keys(CONFIG.CTAS).map(c => <option key={c} value={c}>{c}</option>)}
+                                                </select>
+                                            </div>
+                                            {selectedTopic === "Memes" && (
+                                                <div className="md:col-span-2 space-y-2 animate-in zoom-in-95 duration-200">
+                                                    <label className="text-[10px] font-black uppercase text-red-500 tracking-widest pl-1">Viral Meme Selection</label>
+                                                    <select value={selectedMeme} onChange={(e) => setSelectedMeme(e.target.value)} className="w-full bg-[#1a1111] border border-red-900/30 text-sm p-4 rounded-xl outline-none focus:border-red-600 transition-all appearance-none cursor-pointer text-red-100">
+                                                        {Object.keys(CONFIG.MEMES).map(m => <option key={m} value={m}>{m}</option>)}
+                                                    </select>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <button 
+                                            onClick={() => {
+                                                const spike = Math.floor(Math.random() * 2000 * authority);
+                                                setTotalViews(v => v + spike);
+                                                setVideosMade(v => v + 1);
+                                            }} 
+                                            className="group relative w-full bg-white text-black p-10 rounded-2xl flex flex-col items-center justify-center font-black transition-all hover:bg-red-600 hover:text-white active:scale-[0.98] shadow-2xl overflow-hidden"
+                                        >
+                                            <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                                            <i data-lucide="zap" className="w-12 h-12 mb-2 group-hover:animate-pulse"></i>
+                                            <span className="text-3xl tracking-tighter uppercase italic">Publish Viral Spike</span>
+                                        </button>
+
+                                        <div className="grid gap-3">
+                                            <h3 className="text-[10px] font-black uppercase text-neutral-600 tracking-widest mb-2">Hardware & Logistics</h3>
+                                            <UpgradeRow title="Visual Optics" level={upgrades.camera} cost={getCost('camera')} icon="camera" canAfford={channelPoints >= getCost('camera')} onBuy={() => buy('camera')} />
+                                            <UpgradeRow title="Workflow Pro" level={upgrades.editing} cost={getCost('editing')} icon="cpu" canAfford={channelPoints >= getCost('editing')} onBuy={() => buy('editing')} />
+                                            <UpgradeRow title="Marketing Hub" level={upgrades.marketing} cost={getCost('marketing')} icon="bar-chart" canAfford={channelPoints >= getCost('marketing')} onBuy={() => buy('marketing')} />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Consultant Panel */}
+                            <section className={`${activeTab === 'ai' ? 'flex flex-1' : 'hidden'} md:flex md:h-80 bg-[#0a0a0a] border-t border-white/5 flex-col shrink-0 overflow-hidden`}>
+                                <div className="px-6 py-3 bg-black/60 border-b border-white/5 flex items-center gap-3">
+                                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                                    <h3 className="text-[10px] font-black uppercase tracking-widest text-neutral-400 italic">Strategist Consultation</h3>
+                                </div>
+                                <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar bg-black/20">
+                                    {chatHistory.map((m, i) => (
+                                        <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                            <div className={`max-w-[85%] p-4 text-xs border leading-relaxed rounded-2xl ${m.role === 'user' ? 'bg-white text-black font-bold border-white' : 'bg-neutral-900 border-white/10 text-neutral-200'}`}>
+                                                <div className="markdown-content" dangerouslySetInnerHTML={{ __html: marked.parse(m.content) }} />
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {isAiLoading && <div className="flex gap-1 p-4 bg-neutral-900 w-16 rounded-full"><div className="w-1.5 h-1.5 bg-neutral-600 animate-bounce" /><div className="w-1.5 h-1.5 bg-neutral-600 animate-bounce delay-100" /></div>}
+                                </div>
+                                <form onSubmit={sendMessage} className="p-4 bg-black flex gap-3">
+                                    <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} placeholder="Consult metrics..." className="flex-1 bg-white/5 border border-white/10 rounded-xl px-5 py-3 text-xs outline-none focus:border-red-600 transition-all text-white" />
+                                    <button type="submit" disabled={isAiLoading || !chatInput.trim()} className="bg-red-600 px-6 rounded-xl font-black text-xs uppercase transition-all hover:bg-red-500 active:scale-95 shadow-lg shadow-red-900/20">Send</button>
+                                </form>
+                            </section>
+                        </main>
+                    </div>
+
+                    {/* Navigation */}
+                    <nav className="md:hidden flex bg-[#0a0a0a] border-t border-white/5 shrink-0 h-[70px] z-50 px-2">
+                        <TabButton active={activeTab === 'stats'} onClick={() => setActiveTab('stats')} icon="trending-up" label="Ranking" />
+                        <TabButton active={activeTab === 'work'} onClick={() => setActiveTab('work')} icon="zap" label="Studio" />
+                        <TabButton active={activeTab === 'ai'} onClick={() => setActiveTab('ai')} icon="message-circle" label="AI" />
+                    </nav>
+
+                    {/* Settings Modal (THE API KEY SECTION IS HERE) */}
+                    {showSettings && (
+                        <div className="fixed inset-0 bg-black/95 flex items-center justify-center p-6 z-[300] backdrop-blur-xl">
+                            <div className="bg-[#0f0f0f] border border-white/10 w-full max-w-sm p-10 rounded-3xl shadow-2xl space-y-8">
+                                <div className="flex justify-between items-center border-b border-white/5 pb-6">
+                                    <h3 className="font-black text-lg tracking-tight italic uppercase">Configuration</h3>
+                                    <button onClick={() => setShowSettings(false)} className="bg-white/5 p-2 rounded-full"><i data-lucide="x" className="w-5 h-5"></i></button>
+                                </div>
+                                
+                                <div className="space-y-6">
+                                    <div className="space-y-2">
+                                        <label className="block text-[10px] font-black text-neutral-500 uppercase tracking-widest">Brand Name</label>
+                                        <input type="text" value={channelName} onChange={(e) => setChannelName(e.target.value)} className="w-full bg-white/5 border border-white/10 px-5 py-4 rounded-2xl text-xs text-white outline-none focus:border-red-600 transition-all" />
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        <div className="flex justify-between items-end">
+                                            <label className="block text-[10px] font-black text-red-500 uppercase tracking-widest">Gemini API Key</label>
+                                            <a href="https://aistudio.google.com/app/apikey" target="_blank" className="text-[10px] text-blue-500 hover:underline font-bold">Get a free key 🔗</a>
+                                        </div>
+                                        <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="PASTE KEY HERE" className="w-full bg-white/5 border border-white/10 px-5 py-4 rounded-2xl text-xs text-white outline-none focus:border-red-600 transition-all font-mono" />
+                                        <p className="text-[9px] text-neutral-600 leading-relaxed italic">The AI requires this key to analyze your stats. It is only stored in your browser.</p>
+                                    </div>
+
+                                    <div className="pt-4 space-y-3">
+                                        <button onClick={() => setShowSettings(false)} className="w-full py-5 bg-white text-black font-black rounded-2xl uppercase tracking-widest text-xs hover:bg-neutral-200 transition-all active:scale-[0.98] shadow-xl">Apply Changes</button>
+                                        <button onClick={() => { if(confirm('Erase all local channel data?')) { localStorage.clear(); window.location.reload(); } }} className="w-full text-[10px] text-neutral-700 font-bold uppercase hover:text-red-500 transition-colors">Hard Factory Reset</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const TabButton = ({ active, onClick, icon, label }) => (
+            <button onClick={onClick} className={`flex-1 flex flex-col items-center justify-center gap-1 transition-all ${active ? 'tab-active' : 'text-neutral-500'}`}>
+                <i data-lucide={icon} className="w-5 h-5"></i>
+                <span className="text-[9px] font-black uppercase tracking-tighter">{label}</span>
+            </button>
+        );
+
+        const StatRow = ({ label, value, icon, color = "text-neutral-200" }) => (
+            <div className="flex items-center justify-between p-4 rounded-2xl bg-white/[0.02] border border-white/5 group hover:border-red-900/30 transition-all">
+                <div className="flex items-center gap-3">
+                    <i data-lucide={icon} className="w-4 h-4 text-neutral-500 group-hover:text-red-500"></i>
+                    <span className="text-[10px] font-black uppercase text-neutral-500 tracking-widest">{label}</span>
+                </div>
+                <span className={`text-xs font-black tracking-tight font-mono ${color}`}>{value}</span>
+            </div>
+        );
+
+        const UpgradeRow = ({ title, level, cost, icon, canAfford, onBuy }) => (
+            <div className="bg-[#111] border border-white/5 p-5 rounded-2xl flex items-center justify-between group hover:border-red-900/30 transition-all">
+                <div className="flex items-center gap-4">
+                    <div className="p-3 bg-black rounded-xl text-neutral-600 group-hover:text-red-500 transition-colors border border-white/5"><i data-lucide={icon} className="w-5 h-5"></i></div>
+                    <div>
+                        <p className="text-xs font-black uppercase tracking-tighter">{title} <span className="text-red-600 text-[10px] ml-1">L{level}</span></p>
+                        <p className="text-[10px] font-bold text-neutral-600 uppercase tracking-widest">{cost.toLocaleString()} CP</p>
+                    </div>
+                </div>
+                <button onClick={onBuy} disabled={!canAfford} className={`px-5 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${canAfford ? 'bg-white text-black hover:bg-neutral-200 shadow-md active:scale-95' : 'bg-neutral-800 text-neutral-600 opacity-50 cursor-not-allowed'}`}>Upgrade</button>
+            </div>
+        );
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
+
