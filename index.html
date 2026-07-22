@@ -14,31 +14,46 @@
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=JetBrains+Mono:wght@700&display=swap');
         
         :root { --sab: env(safe-area-inset-bottom); }
+        * { box-sizing: border-box; }
+
         body { 
             font-family: 'Inter', sans-serif; 
             background-color: #0a0a0a;
             overscroll-behavior-y: none;
-            height: 100%; width: 100%;
+            height: 100vh; width: 100vw;
             position: fixed; overflow: hidden;
             color: #ffffff;
         }
-        #root { height: 100dvh; display: flex; flex-direction: column; }
+        #root { height: 100vh; display: flex; flex-direction: column; }
+        
         .custom-scrollbar::-webkit-scrollbar { width: 3px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
         
-        /* Studio Odometer Styling */
+        /* FIXED ODOMETER STYLING */
         .odometer-container {
             display: inline-flex;
             overflow: hidden;
             height: 1.2em;
             line-height: 1.2em;
-            font-family: 'JetBrains+Mono', monospace;
+            font-family: 'JetBrains Mono', monospace;
+            vertical-align: middle;
+        }
+        .digit-box {
+            height: 1.2em;
+            overflow: hidden;
+            display: inline-block;
         }
         .digit-column {
             display: flex;
             flex-direction: column;
-            transition: transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+            transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .digit-column span {
+            height: 1.2em;
+            line-height: 1.2em;
+            display: block;
+            text-align: center;
         }
 
         .studio-card {
@@ -56,7 +71,7 @@
         .tab-active::after {
             content: '';
             position: absolute;
-            bottom: -2px;
+            bottom: 2px;
             left: 50%;
             transform: translateX(-50%);
             width: 12px;
@@ -73,7 +88,7 @@
         const { useState, useEffect, useRef, useMemo } = React;
 
         const RollingDigit = ({ digit }) => (
-            <div className="odometer-container">
+            <div className="digit-box">
                 <div className="digit-column" style={{ transform: `translateY(-${digit * 10}%)` }}>
                     {[0,1,2,3,4,5,6,7,8,9].map(n => <span key={n}>{n}</span>)}
                 </div>
@@ -83,7 +98,7 @@
         const StudioCounter = ({ value, className }) => {
             const digits = Math.floor(value).toString().split('');
             return (
-                <div className={`flex ${className}`}>
+                <div className={`odometer-container ${className}`}>
                     {digits.map((d, i) => <RollingDigit key={digits.length - i} digit={parseInt(d)} />)}
                 </div>
             );
@@ -117,6 +132,12 @@
                 { id: 'r9', name: "HolaSoyGerman", subs: 165000000, daily: -2 },
                 { id: 'r10', name: "Moonbug Limited", subs: 154000000, daily: 92 }
             ]));
+
+            useEffect(() => {
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+            });
 
             useEffect(() => {
                 localStorage.setItem('yt_v3_subs', JSON.stringify(subscribers));
@@ -199,13 +220,25 @@
                 const sys = `Growth strategist game mode. User: ${subscribers} subs. Rank: #${currentRankings.findIndex(r => r.isUser) + 1}. Wallet: ${channelPoints} CP. Topics: Gaming, Tech, Memes, Vlogs, Education. CTAs: None, Like & Sub, Comment, External Link. Direct analysis only. No emojis. 6-7 is a high-reach meme.`;
 
                 try {
-                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ contents: [{ parts: [{ text: txt }] }], systemInstruction: { parts: [{ text: sys }] } })
+                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`, {
+                        method: 'POST', 
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            contents: [{ parts: [{ text: txt }] }], 
+                            systemInstruction: { parts: [{ text: sys }] } 
+                        })
                     });
                     const d = await res.json();
-                    setChatHistory(p => [...p, { role: 'ai', content: d.candidates?.[0]?.content?.parts?.[0]?.text || "Consultant error." }]);
-                } catch { setChatHistory(p => [...p, { role: 'ai', content: "Connect error. API Key needed." }]); } finally { setIsAiLoading(false); }
+                    if (d.error) {
+                        setChatHistory(p => [...p, { role: 'ai', content: `API Error: ${d.error.message}` }]);
+                    } else {
+                        setChatHistory(p => [...p, { role: 'ai', content: d.candidates?.[0]?.content?.parts?.[0]?.text || "Consultant error." }]);
+                    }
+                } catch (err) { 
+                    setChatHistory(p => [...p, { role: 'ai', content: "Connect error. Check network or API key." }]); 
+                } finally { 
+                    setIsAiLoading(false); 
+                }
             };
 
             useEffect(() => { if (chatContainerRef.current) chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight; }, [chatHistory, isAiLoading]);
@@ -226,7 +259,7 @@
                         <aside className={`${activeTab === 'stats' ? 'flex' : 'hidden md:flex'} w-full md:w-[400px] flex-col shrink-0 bg-[#0a0a0a] border-r border-white/5 overflow-hidden`}>
                             <div className="p-6 border-b border-white/5 hidden md:flex justify-between items-center">
                                 <h2 className="font-black text-xl tracking-tight text-white italic">GLOBAL TOP 10</h2>
-                                <button onClick={() => setShowSettings(true)}><i data-lucide="sliders" className="w-5 h-5 text-neutral-500 hover:text-white transition-colors cursor-pointer"></i></button>
+                                <button onClick={() => setShowSettings(false)}><i data-lucide="sliders" className="w-5 h-5 text-neutral-500 hover:text-white transition-colors cursor-pointer"></i></button>
                             </div>
                             
                             <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
@@ -248,7 +281,7 @@
                                     <span className="text-sm font-black text-amber-400 font-mono">{channelPoints.toLocaleString()} CP</span>
                                 </div>
                                 <div className="h-1 bg-white/5 rounded-full overflow-hidden">
-                                    <div className="h-full bg-red-600" style={{ width: `${(subscribers / currentRankings[0].subs) * 100}%` }}></div>
+                                    <div className="h-full bg-red-600" style={{ width: `${Math.min(100, (subscribers / currentRankings[0].subs) * 100)}%` }}></div>
                                 </div>
                             </div>
                         </aside>
@@ -340,7 +373,7 @@
                         <TabButton active={activeTab === 'ai'} onClick={() => setActiveTab('ai')} icon="message-circle" label="AI" />
                     </nav>
 
-                    {/* Settings Modal (THE API KEY SECTION IS HERE) */}
+                    {/* Settings Modal */}
                     {showSettings && (
                         <div className="fixed inset-0 bg-black/95 flex items-center justify-center p-6 z-[300] backdrop-blur-xl">
                             <div className="bg-[#0f0f0f] border border-white/10 w-full max-w-sm p-10 rounded-3xl shadow-2xl space-y-8">
@@ -383,16 +416,6 @@
             </button>
         );
 
-        const StatRow = ({ label, value, icon, color = "text-neutral-200" }) => (
-            <div className="flex items-center justify-between p-4 rounded-2xl bg-white/[0.02] border border-white/5 group hover:border-red-900/30 transition-all">
-                <div className="flex items-center gap-3">
-                    <i data-lucide={icon} className="w-4 h-4 text-neutral-500 group-hover:text-red-500"></i>
-                    <span className="text-[10px] font-black uppercase text-neutral-500 tracking-widest">{label}</span>
-                </div>
-                <span className={`text-xs font-black tracking-tight font-mono ${color}`}>{value}</span>
-            </div>
-        );
-
         const UpgradeRow = ({ title, level, cost, icon, canAfford, onBuy }) => (
             <div className="bg-[#111] border border-white/5 p-5 rounded-2xl flex items-center justify-between group hover:border-red-900/30 transition-all">
                 <div className="flex items-center gap-4">
@@ -411,4 +434,3 @@
     </script>
 </body>
 </html>
-
