@@ -194,6 +194,20 @@
 
             const authority = useMemo(() => 1 + (Math.log10(totalViews + 10) * 0.38), [totalViews]);
 
+            // Live rate calculations for VPD and SPD
+            const rates = useMemo(() => {
+                const tMult = CONFIG.TOPICS[selectedTopic] * (selectedTopic === 'Memes' ? CONFIG.MEMES[selectedMeme].v : 1);
+                const sMult = (selectedTopic === 'Memes' ? CONFIG.MEMES[selectedMeme].s : 1) * CONFIG.CTAS[selectedCTA];
+                
+                const vGainPerSec = (15 + (upgrades.camera * 40)) * tMult * authority;
+                const sGainPerSec = (2 + (upgrades.editing * 5)) * sMult * (vGainPerSec / 100) * authority;
+
+                return {
+                    vpd: Math.floor(vGainPerSec * 86400),
+                    spd: Math.floor(sGainPerSec * 86400)
+                };
+            }, [upgrades, selectedTopic, selectedMeme, selectedCTA, authority]);
+
             useEffect(() => {
                 const interval = setInterval(() => {
                     const tMult = CONFIG.TOPICS[selectedTopic] * (selectedTopic === 'Memes' ? CONFIG.MEMES[selectedMeme].v : 1);
@@ -288,15 +302,34 @@
                                             <div className={`text-[10px] font-bold uppercase tracking-widest ${c.isUser ? 'text-red-500' : 'text-neutral-400'}`}>{c.name}</div>
                                             <StudioCounter value={c.subs} className={`text-lg font-bold tracking-tighter ${c.isUser ? 'text-white' : 'text-neutral-200'}`} />
                                         </div>
-                                        {c.isUser && <div className="w-2 h-2 bg-red-600 rounded-full animate-ping" />}
+                                        {c.isUser && <div className="w-2 h-2 bg-red-600 rounded-full animate-ping shrink-0" />}
                                     </div>
                                 ))}
                             </div>
                             
-                            <div className="p-6 border-t border-white/5 bg-black/40 space-y-4">
-                                <div className="flex justify-between items-center">
-                                    <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Available Capital</span>
-                                    <span className="text-sm font-black text-amber-400 font-mono">{channelPoints.toLocaleString()} CP</span>
+                            {/* LIVE METRICS PANEL (RIGHT BELOW THE TOP 10 CHART) */}
+                            <div className="p-4 border-t border-white/5 bg-black/60 space-y-3">
+                                <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                                    <span className="text-[10px] font-black uppercase text-red-500 tracking-widest">Your Live Stats</span>
+                                    <span className="text-[9px] font-mono text-amber-400 font-bold">{channelPoints.toLocaleString()} CP</span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 text-mono">
+                                    <div className="bg-white/[0.03] p-2.5 rounded-lg border border-white/5">
+                                        <span className="text-[8px] font-sans uppercase font-bold text-neutral-500 block">Subscribers</span>
+                                        <span className="text-xs font-black text-white">{subscribers.toLocaleString()}</span>
+                                    </div>
+                                    <div className="bg-white/[0.03] p-2.5 rounded-lg border border-white/5">
+                                        <span className="text-[8px] font-sans uppercase font-bold text-neutral-500 block">Total Views</span>
+                                        <span className="text-xs font-black text-white">{totalViews.toLocaleString()}</span>
+                                    </div>
+                                    <div className="bg-white/[0.03] p-2.5 rounded-lg border border-white/5">
+                                        <span className="text-[8px] font-sans uppercase font-bold text-emerald-500 block">SPD (Subs/Day)</span>
+                                        <span className="text-xs font-black text-emerald-400">+{rates.spd.toLocaleString()}</span>
+                                    </div>
+                                    <div className="bg-white/[0.03] p-2.5 rounded-lg border border-white/5">
+                                        <span className="text-[8px] font-sans uppercase font-bold text-blue-500 block">VPD (Views/Day)</span>
+                                        <span className="text-xs font-black text-blue-400">+{rates.vpd.toLocaleString()}</span>
+                                    </div>
                                 </div>
                                 <div className="h-1 bg-white/5 rounded-full overflow-hidden">
                                     <div className="h-full bg-red-600" style={{ width: `${Math.min(100, (subscribers / currentRankings[0].subs) * 100)}%` }}></div>
